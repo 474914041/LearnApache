@@ -42,8 +42,14 @@
 #include "http_config.h"
 #include "http_protocol.h"
 #include "ap_config.h"
+#include "http_log.h"
+#include "http_connection.h"
 
-#define DFT_BUF_SIZE 1024
+#define 	DFT_BUF_SIZE 			1024
+#define  	MAX_FILE_LEN_DIGITS   	64
+#define 	MAX_PATH_NAME			256
+
+#if 0
 /** 
 * @brief read_post_data 从 request 中获取 POST 数据到缓冲区
 * 
@@ -76,7 +82,7 @@ static int read_post_data(request_rec* req, char** post, size_t* post_size)
 				realloc(*post, count);
 				if (*post == NULL)
 				{
-					retrun HTTP_INTERNAL_SERVER_ERROR;
+					return HTTP_INTERNAL_SERVER_ERROR;
 				}
 			}
 
@@ -139,11 +145,106 @@ static int portal_handler(request_rec * r)
 	post = NULL;
 	return OK;
 }
+#endif
+
+const char *get_file_name(const char *path) {
+	if (NULL == path) {
+		return NULL;
+	}
+	int path_len = strlen(path);
+	const char *pos = path + path_len;
+	while ((*pos) != '/' && pos != path)
+	{
+		pos--;
+	}
+	return (pos + 1);
+}
+
+int get_file_length(const char *file_path, request_rec *r) {
+	int len = 0;
+	apr_finfo_t info;
+	apr_stat(&info, file_path, APR_FINFO_SIZE, r->pool);
+	len = (apr_size_t)info.size;
+	ap_log_error(APLOG_MARK, APLOG_DEBUG, 0, r->server, "file:%s, len:%d", file_path, len);
+	return len;
+}
+
+/*
+header("Content-type: application/octet-stream");                   //高速浏览器传递的是文件流
+header("Accept-Length: 2048");                                                  //文件大小
+header("Content-Disposition: attachment; filename=abc.txt");  //指定文件名
+
+http://192.168.1.100:8088/mymodule?file=/home/test/abc.txt&type=2
+
+*/
+static int mymodule_handler(request_rec *r)
+{
+	if (strcmp(r->handler, "portal")) {
+		return DECLINED;
+	}
+
+	if ((r->method_number != M_GET) && (r->method_number != M_POST)) {
+		return HTTP_METHOD_NOT_ALLOWED;
+	}
+
+	/* full url : http://172.25.3.121:8088/helloworld?file=/home/test.txt&type=2*/
+    /* r->parsed_uri.query : file=/home/test.txt&type=2 */
+	if (NULL == r->parsed_uri.query) {
+		ap_log_error(APLOG_MARK, APLOG_ERR, 0, r->server, "uri param is empty");
+		return HTTP_BAD_REQUEST;
+	}
+
+	/* parse file name from uri param */
+	char file_path[MAX_PATH_NAME] = {0};
+	int file_type = 0;
+	int ret = sscanf(r->parsed_uri.query, "file=%[^&]&type=%d", file_path, &file_type);
+	if (ret != 2) {
+		ap_log_error(APLOG_MARK, APLOG_ERR, 0, r->server, "failet to parse file path and type from url:%s,ret = %d", r->parsed_uri.query, ret);
+		return HTTP_BAD_REQUEST;
+	}
+
+	/* set response headers */
+    /* Content-Type:application/octet-stream */	
+	r->content_type = "application/octet-stream";
+
+	/* Content-Disposition:attachment;filename=test.txt */
+	char file_name[MAX_PATH_NAME] = {0};
+	snprintf(file_name, MAX_PATH_NAME, "attachment;filename=%s", get_file_name(file_path));
+	apr_table_add(r->headers_out, "Content-Disposition", file_name);
+
+	char file_len[MAX_FILE_LEN_DIGITS] = {0};
+	int file_length = get_file_length(file_path, r);
+	snprintf(file_len, MAX_FILE_LEN_DIGITS, "%d", file_length);
+	apr_table_add(r->headers_out, "Content-Length", file_len);
+
+	apr_file_t *f = NULL;
+	//apr_status_t rv;
+	apr_off_t offset = 0;
+	apr_size_t bytes = 0;
+	apr_size_t len = file_length;
+	apr_file_open(&f, file_path, APR_READ | APR_SENDFILE_ENABLED, APR_OS_DEFAULT, r->pool);
+	if (NULL == f) {
+		ap_log_error(APLOG_MARK, APLOG_ERR, 0, r->server, "file(%s) permissions deny server access", file_path);
+		return -1;
+	}
+	if (!r->header_only) {
+		while(offset < len) {
+			ap_flush_conn(r->connection);
+			ap_send_fd(f, r, offset, len, &bytes);
+			offset += bytes;
+		}
+	}
+	apr_file_close(f);
+	return OK;
+}
+
+
 
 
 static void portal_register_hooks(apr_pool_t * p)
 {
-	ap_hook_handler(portal_handler, NULL, NULL, APR_HOOK_MIDDLE);
+	//ap_hook_handler(portal_handler, NULL, NULL, APR_HOOK_MIDDLE);
+	ap_hook_handler(mymodule_handler, NULL, NULL, APR_HOOK_MIDDLE);
 }
 
 
