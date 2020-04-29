@@ -55,6 +55,7 @@ http://shineforyou.club/basefun.sum?digest=789456
 #include "apr_md5.h"
 #include "apr_sha1.h"
 
+static const char s_szCaseFilterName[] = "CaseFilter";
 
 /* The sample content handler */
 static int basefun_handler(request_rec *r)
@@ -205,10 +206,12 @@ static int basefun_handler(request_rec *r)
 		apr_file_close(file);
 			
 	}
+	const char *bigout = apr_table_get(GET, "bigout");
+	if (bigout && !strcasecmp(bigout, "on")) {
+    	ap_add_output_filter(s_szCaseFilterName, NULL, r, r->connection);
+	}
 
-	
-	
-    
+	ap_rprintf(r, "<p>此次已经注册完了转大写的filter</p>");
     /* Lastly, we must tell the server that we took care of this request and everything went fine.
      * We do so by simply returning the value OK to the server.
      */
