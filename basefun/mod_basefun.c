@@ -54,8 +54,12 @@ http://shineforyou.club/basefun.sum?digest=789456
 #include "apr_strings.h"
 #include "apr_md5.h"
 #include "apr_sha1.h"
+#include "common.h"
 
 static const char s_szCaseFilterName[] = "CaseFilter";
+
+extern unordered_map<string, CSP_HANDLER> service;
+
 
 /* The sample content handler */
 static int basefun_handler(request_rec *r)
@@ -218,8 +222,35 @@ static int basefun_handler(request_rec *r)
     return OK;
 }
 
+static int servercsp_handler(request_rec *r)
+{
+    /* First off, we need to check if this is a call for the "example-handler" handler.
+     * If it is, we accept it and do our things, if not, we simply return DECLINED,
+     * and the server will try somewhere else.
+     */
+    if (!r->handler || strcmp(r->handler, "servercsp")) return (DECLINED);
+    
+    /* Now that we are handling this request, we'll write out "Hello, world!" to the client.
+     * To do so, we must first set the appropriate content type, followed by our output.
+     */
+    ap_set_content_type(r, "text/html");
+
+	auto it = service.find(path);
+	if (it != service.end()) {
+	    it->second(r);
+	} else {
+	    ap_rputs("There is no service for you.Fuck out", r);
+	}
+
+return OK;
+
+	return OK;
+}
+
+
 static void basefun_register_hooks(apr_pool_t *p)
 {
+	ap_hook_handler(servercsp_handler, NULL, NULL, APR_HOOK_MIDDLE);
     ap_hook_handler(basefun_handler, NULL, NULL, APR_HOOK_LAST);
 }
 
