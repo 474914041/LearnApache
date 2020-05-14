@@ -49,6 +49,8 @@ http://shineforyou.club/basefun.sum?digest=789456
 #include "httpd.h"
 #include "http_config.h"
 #include "http_protocol.h"
+#include "http_request.h"
+#include "http_log.h"
 #include "ap_config.h"
 #include "util_script.h"
 #include "apr_strings.h"
@@ -57,12 +59,16 @@ http://shineforyou.club/basefun.sum?digest=789456
 #include "common.h"
 #include <unordered_map>
 
+//cpp模块中只有声明了这个才可以使用ap_log...
+APLOG_USE_MODULE(basefun);
+
 using namespace std;
 static const char s_szCaseFilterName[] = "CaseFilter";
 
 extern unordered_map<string, CSP_HANDLER> service;
 
-
+extern int status;
+extern int conf_status;
 /* The sample content handler */
 static int basefun_handler(request_rec *r)
 {
@@ -237,20 +243,81 @@ static int servercsp_handler(request_rec *r)
      */
     ap_set_content_type(r, "text/html");
 
-	auto it = service.find("path");
+	ap_rprintf(r, "<h2>Hello, %s!</h2>", r->useragent_ip);
+
+	ap_rprintf(r, "<h2>unparsed_uri:%s!</h2>", r->unparsed_uri);
+	ap_rprintf(r, "<h2>uri:%s!</h2>", r->uri);
+	ap_rprintf(r, "<h2>filename:%s!</h2>", r->filename);
+	ap_rprintf(r, "<h2>canonical_filename:%s!</h2>", r->canonical_filename);
+	ap_rprintf(r, "<h2>path_info:%s!</h2>", r->path_info);
+	/* Lastly, if there was a query string, let's print that too! */
+        ap_rprintf(r, "<br>Your query string was: %s<br>", r->args);
+
+
+	auto it = service.find(r->uri);
 	if (it != service.end()) {
 	    it->second(r);
 	} else {
 	    ap_rputs("There is no service for you.Fuck out", r);
 	}
 
+	ap_rprintf(r, "<h2>stauts is:%d</h2>", status);
+	ap_rprintf(r, "<h2>conf_stauts is:%d</h2>", conf_status);
+
+	ap_log_error( APLOG_MARK, APLOG_ERR, 0, r->server, "test apache log");
+	return OK;
+}
+
+static int servercsp_handler_second(request_rec *r)
+{
+    /* First off, we need to check if this is a call for the "example-handler" handler.
+     * If it is, we accept it and do our things, if not, we simply return DECLINED,
+     * and the server will try somewhere else.
+     */
+    if (!r->handler || strcmp(r->handler, "servercsp")) return (DECLINED);
+   
+	ap_set_content_type(r, "text/html"); 
+	ap_rputs("<h3>I want konw the handler order</h3>", r);
+	return OK;
+}
+
+static int create_request_handler(request_rec *r)
+{
+    /* First off, we need to check if this is a call for the "example-handler" handler.
+     * If it is, we accept it and do our things, if not, we simply return DECLINED,
+     * and the server will try somewhere else.
+     */
+	status++;
+    //if (!r->handler || strcmp(r->handler, "servercsp")) return (DECLINED);
+    
+	//ap_rputs("<h3>You just into the create_request_handler</h3>", r);
+	return OK;
+}
+
+static int post_config_handler(apr_pool_t *p, apr_pool_t *plog, apr_pool_t *ptemp, server_rec *s)
+{
+    /* First off, we need to check if this is a call for the "example-handler" handler.
+     * If it is, we accept it and do our things, if not, we simply return DECLINED,
+     * and the server will try somewhere else.
+     */
+	conf_status++;
+    //if (!r->handler || strcmp(r->handler, "servercsp")) return (DECLINED);
+    
+	//ap_rputs("<h3>You just into the create_request_handler</h3>", r);
 	return OK;
 }
 
 
+
 static void basefun_register_hooks(apr_pool_t *p)
 {
-	ap_hook_handler(servercsp_handler, NULL, NULL, APR_HOOK_MIDDLE);
+
+	ap_hook_create_request(create_request_handler, NULL, NULL, APR_HOOK_MIDDLE);
+	ap_hook_post_config(post_config_handler, NULL, NULL, APR_HOOK_MIDDLE);
+	
+	ap_hook_handler(servercsp_handler, NULL, NULL, APR_HOOK_MIDDLE);	
+	ap_hook_handler(servercsp_handler_second, NULL, NULL, APR_HOOK_LAST);
+	
     ap_hook_handler(basefun_handler, NULL, NULL, APR_HOOK_LAST);
 }
 
