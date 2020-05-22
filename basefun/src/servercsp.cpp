@@ -4,6 +4,8 @@
 #include "common.h"
 using namespace std;
 
+int status = 0;
+int conf_status = 0;
 void say_hello(request_rec *r) {
     ap_rputs("Thanks for your come!Nice to meet you.", r);
 }
@@ -13,7 +15,7 @@ void pay_money(request_rec *r) {
 }
 
 unordered_map<string, CSP_HANDLER> service = {
-    {"sayhello.csp", say_hello},
-    {"paymoney.csp", pay_money}
+    {"/sayhello.csp", say_hello},
+    {"/paymoney.csp", pay_money}
 };
 

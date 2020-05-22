@@ -250,8 +250,7 @@ static int servercsp_handler(request_rec *r)
 	ap_rprintf(r, "<h2>filename:%s!</h2>", r->filename);
 	ap_rprintf(r, "<h2>canonical_filename:%s!</h2>", r->canonical_filename);
 	ap_rprintf(r, "<h2>path_info:%s!</h2>", r->path_info);
-	/* Lastly, if there was a query string, let's print that too! */
-        ap_rprintf(r, "<br>Your query string was: %s<br>", r->args);
+    ap_rprintf(r, "<h2>Your query string was: %s</h2>", r->args);
 
 
 	auto it = service.find(r->uri);
@@ -264,7 +263,12 @@ static int servercsp_handler(request_rec *r)
 	ap_rprintf(r, "<h2>stauts is:%d</h2>", status);
 	ap_rprintf(r, "<h2>conf_stauts is:%d</h2>", conf_status);
 
-	ap_log_error( APLOG_MARK, APLOG_ERR, 0, r->server, "test apache log");
+	ap_log_error( APLOG_MARK, APLOG_ERR, 0, r->server, "into the servercsp_handler");
+
+	status++;
+    //if (!r->handler || strcmp(r->handler, "servercsp")) return (DECLINED);
+    ap_log_error( APLOG_MARK, APLOG_ERR, 0, r->server, "statu in servercsp_handler is %d", status);
+	
 	return OK;
 }
 
@@ -278,6 +282,8 @@ static int servercsp_handler_second(request_rec *r)
    
 	ap_set_content_type(r, "text/html"); 
 	ap_rputs("<h3>I want konw the handler order</h3>", r);
+
+	ap_log_error( APLOG_MARK, APLOG_ERR, 0, r->server, "into the servercsp_handler_second");
 	return OK;
 }
 
@@ -289,7 +295,8 @@ static int create_request_handler(request_rec *r)
      */
 	status++;
     //if (!r->handler || strcmp(r->handler, "servercsp")) return (DECLINED);
-    
+	ap_log_error( APLOG_MARK, APLOG_ERR, 0, r->server, "into the create_request_handler");
+    ap_log_error( APLOG_MARK, APLOG_ERR, 0, r->server, "statu in create_request is %d", status);
 	//ap_rputs("<h3>You just into the create_request_handler</h3>", r);
 	return OK;
 }
@@ -301,13 +308,16 @@ static int post_config_handler(apr_pool_t *p, apr_pool_t *plog, apr_pool_t *ptem
      * and the server will try somewhere else.
      */
 	conf_status++;
-    //if (!r->handler || strcmp(r->handler, "servercsp")) return (DECLINED);
-    
+    //if (!r->handler || strcmp(r->handler, "servercsp")) return (DECLINED);s    
+	ap_log_error( APLOG_MARK, APLOG_ERR, 0, s, "into the post_config_handler");
 	//ap_rputs("<h3>You just into the create_request_handler</h3>", r);
 	return OK;
 }
 
-
+static void test_child_init(apr_pool_t *p, server_rec *s)
+{
+	ap_log_error( APLOG_MARK, APLOG_ERR, 0, s, "into the test_child_init");
+}
 
 static void basefun_register_hooks(apr_pool_t *p)
 {
@@ -317,7 +327,8 @@ static void basefun_register_hooks(apr_pool_t *p)
 	
 	ap_hook_handler(servercsp_handler, NULL, NULL, APR_HOOK_MIDDLE);	
 	ap_hook_handler(servercsp_handler_second, NULL, NULL, APR_HOOK_LAST);
-	
+
+	ap_hook_child_init(test_child_init, NULL, NULL, APR_HOOK_MIDDLE);
     ap_hook_handler(basefun_handler, NULL, NULL, APR_HOOK_LAST);
 }
 
